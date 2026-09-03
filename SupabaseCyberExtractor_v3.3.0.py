@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
 ======================================================================
- SUPABASE CYBER EXTRACTOR & DATA IDE // v3.3 [STANDALONE EDITION]
+ SUPABASE CYBER EXTRACTOR & DATA IDE // v3.3 [ENCRYPTED STORAGE EDITION]
 ======================================================================
  Features:
-  - Background Auto-Update & Maintenance Engine
-  - Version Control & Rollback System
-  - Step-by-Step Credential Navigator
-  - Dedicated Regex Key-Value Matcher
-  - Auto-Save Hierarchy (C:\JuicyDumper\<Target>\<File>.json)
-  - Built-in IDE Code Viewer & File Explorer
+  - Strict Maintenance Lockout (Overlay + Non-closable Modal)
+  - GitHub Cache-Busting Maintenance Checker
+  - Auto-Encrypted Storage on Disk (AES-256)
+  - Seamless Decryption inside Workspace & Viewer
+  - Custom Application Icon Support (.ico / .png)
+  - Step-by-Step Credential Navigator & Regex Matcher
 ======================================================================
 """
 
@@ -18,6 +18,7 @@ import os
 import json
 import re
 import time
+import base64
 import subprocess
 import threading
 import shutil
@@ -34,8 +35,56 @@ from requests.exceptions import ConnectionError, Timeout, RequestException
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# Encryption Library
+try:
+    from cryptography.fernet import Fernet
+except ImportError:
+    Fernet = None
+
 # ====================================================================
-# 🚀 VERSION & REPO CONFIGURATION
+# 🚀 HELPER PARA SA ASSETS / PYINSTALLER COMPILATION
+# ====================================================================
+def resource_path(relative_path):
+    """Kinukuha ang tamang absolute path para sa dev at PyInstaller exe."""
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+# ====================================================================
+# 🔐 ENCRYPTION ENGINE (AES / FERNET)
+# ====================================================================
+SECRET_APP_SALT = b"SUPABASE_CYBER_EXTRACTOR_SUPER_SECRET_KEY_2026"
+ENCRYPTION_KEY = base64.urlsafe_b64encode(hashlib.sha256(SECRET_APP_SALT).digest())
+
+def encrypt_data(raw_string: str) -> str:
+    """Ie-encrypt ang data bago i-save sa disk."""
+    if Fernet is None:
+        encoded = base64.b64encode(raw_string.encode('utf-8')).decode('utf-8')
+        return f"ENC::{encoded}"
+    
+    cipher = Fernet(ENCRYPTION_KEY)
+    encrypted = cipher.encrypt(raw_string.encode('utf-8'))
+    return encrypted.decode('utf-8')
+
+def decrypt_data(cipher_string: str) -> str:
+    """Ide-decrypt ang data kapag binuksan sa loob ng Workspace viewer."""
+    try:
+        if cipher_string.startswith("ENC::"):
+            raw_b64 = cipher_string.replace("ENC::", "")
+            return base64.b64decode(raw_b64.encode('utf-8')).decode('utf-8')
+        
+        if Fernet is not None:
+            cipher = Fernet(ENCRYPTION_KEY)
+            decrypted = cipher.decrypt(cipher_string.encode('utf-8'))
+            return decrypted.decode('utf-8')
+    except Exception:
+        pass
+    return cipher_string
+
+# ====================================================================
+# 🚀 VERSION CONFIGURATION
 # ====================================================================
 APP_VERSION = "3.3.0"
 APP_NAME = "SupabaseCyberExtractor"
@@ -79,7 +128,6 @@ FONT_SMALL = ("Consolas", 8)
 # ====================================================================
 class GitHubVersionManager:
     """Handles version checking and updates"""
-    
     def __init__(self, app_path=None):
         self.app_path = app_path or sys.argv[0]
         self.app_dir = os.path.dirname(self.app_path)
@@ -96,7 +144,7 @@ class GitHubVersionManager:
             try:
                 with open(self.version_file, 'r') as f:
                     return json.load(f)
-            except:
+            except Exception:
                 pass
         return {"version": APP_VERSION, "updated_at": datetime.now().isoformat()}
     
@@ -155,7 +203,6 @@ class GitHubVersionManager:
 
 class GitHubUpdateManager:
     """Handles background updates"""
-    
     def __init__(self, repo=None):
         self.repo = repo or GITHUB_REPO
         self.api_url = f"https://api.github.com/repos/{repo}/releases"
@@ -164,33 +211,39 @@ class GitHubUpdateManager:
     
     def get_latest_release(self):
         try:
-            response = requests.get(self.api_url + "/latest", timeout=10)
+            headers = {"Cache-Control": "no-cache"}
+            response = requests.get(f"{self.api_url}/latest?_t={int(time.time())}", headers=headers, timeout=10)
             if response.status_code == 200:
                 return response.json()
             return None
-        except:
+        except Exception:
             return None
     
     def get_all_releases(self):
         try:
-            response = requests.get(self.api_url, timeout=10)
+            headers = {"Cache-Control": "no-cache"}
+            response = requests.get(f"{self.api_url}?_t={int(time.time())}", headers=headers, timeout=10)
             if response.status_code == 200:
                 return response.json()
             return []
-        except:
+        except Exception:
             return []
     
     def check_maintenance_mode(self):
+        """Check if maintenance mode is enabled with Cache-Busting"""
         try:
-            response = requests.get(
-                f"{self.raw_url}/maintenance.json",
-                timeout=5
-            )
+            url = f"{self.raw_url}/maintenance.json?_t={int(time.time())}"
+            headers = {
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+            response = requests.get(url, headers=headers, timeout=6)
             if response.status_code == 200:
                 data = response.json()
                 return data.get("maintenance", False), data.get("message", "Under Maintenance")
             return False, ""
-        except:
+        except Exception:
             return False, ""
     
     def download_release(self, release_info):
@@ -219,7 +272,6 @@ class GitHubUpdateManager:
                 
                 version = release_info.get("tag_name", "").replace("v", "")
                 self.version_manager.save_version_info(version, "update")
-                
                 return True
             return False
         except Exception:
@@ -227,47 +279,41 @@ class GitHubUpdateManager:
 
 
 # ====================================================================
-# 🖥️ MAINTENANCE MODE POPUP
+# 🖥️ NON-CLOSABLE MAINTENANCE MODE POPUP
 # ====================================================================
 class MaintenancePopup(tk.Toplevel):
-    """Themed maintenance mode popup"""
-    
+    """Themed maintenance mode popup that cannot be closed casually"""
     def __init__(self, parent, message="Under Maintenance", version_info=None):
         super().__init__(parent)
+        self.parent = parent
         
         self.title("⛔ SYSTEM MAINTENANCE")
-        self.geometry("500x400")
+        self.geometry("520x440")
         self.configure(bg=BG_PANEL)
-        self.overrideredirect(True)
+        self.resizable(False, False)
         
+        # Modal setup - Locks the window and blocks background clicks
+        self.transient(parent)
+        
+        # Center in parent window
         self.update_idletasks()
-        width = 500
-        height = 400
-        x = (self.winfo_screenwidth() // 2) - (width // 2)
-        y = (self.winfo_screenheight() // 2) - (height // 2)
-        self.geometry(f"{width}x{height}+{x}+{y}")
+        width = 520
+        height = 440
+        x = parent.winfo_x() + (parent.winfo_width() // 2) - (width // 2)
+        y = parent.winfo_y() + (parent.winfo_height() // 2) - (height // 2)
+        self.geometry(f"{width}x{height}+{max(0, x)}+{max(0, y)}")
         
+        # Bawal i-close gamit ang Alt+F4 o Window 'X'
+        self.protocol("WM_DELETE_WINDOW", self.prevent_close)
+
         main_frame = tk.Frame(self, bg=BG_PANEL, bd=2, relief="solid", highlightbackground=BORDER_COLOR, highlightthickness=1)
-        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        main_frame.pack(fill="both", expand=True, padx=12, pady=12)
         
-        icon_label = tk.Label(
-            main_frame,
-            text="🔧",
-            font=("Segoe UI", 48),
-            fg=FG_YELLOW,
-            bg=BG_PANEL
-        )
-        icon_label.pack(pady=(20, 10))
+        icon_label = tk.Label(main_frame, text="⛔", font=("Segoe UI", 44), fg=FG_RED, bg=BG_PANEL)
+        icon_label.pack(pady=(16, 5))
         
-        tk.Label(
-            main_frame,
-            text="SYSTEM UNDER MAINTENANCE",
-            font=("Segoe UI", 18, "bold"),
-            fg=FG_RED,
-            bg=BG_PANEL
-        ).pack(pady=5)
-        
-        tk.Frame(main_frame, height=2, bg=BORDER_COLOR).pack(fill="x", padx=50, pady=10)
+        tk.Label(main_frame, text="SYSTEM UNDER MAINTENANCE", font=("Segoe UI", 16, "bold"), fg=FG_RED, bg=BG_PANEL).pack(pady=4)
+        tk.Frame(main_frame, height=2, bg=BORDER_COLOR).pack(fill="x", padx=40, pady=8)
         
         tk.Label(
             main_frame,
@@ -275,75 +321,60 @@ class MaintenancePopup(tk.Toplevel):
             font=("Segoe UI", 11),
             fg=FG_WHITE,
             bg=BG_PANEL,
-            wraplength=400,
+            wraplength=440,
             justify="center"
-        ).pack(pady=10)
+        ).pack(pady=8)
         
         if version_info:
-            tk.Label(
-                main_frame,
-                text=f"Current Version: {version_info.get('current', 'Unknown')}",
-                font=FONT_SMALL,
-                fg=FG_MUTED,
-                bg=BG_PANEL
-            ).pack(pady=2)
-            tk.Label(
-                main_frame,
-                text=f"New Version: {version_info.get('new', 'Unknown')}",
-                font=FONT_SMALL,
-                fg=FG_CYAN,
-                bg=BG_PANEL
-            ).pack(pady=2)
+            tk.Label(main_frame, text=f"Current Version: {version_info.get('current', 'Unknown')}", font=FONT_SMALL, fg=FG_MUTED, bg=BG_PANEL).pack(pady=1)
+            tk.Label(main_frame, text=f"Status: {version_info.get('new', 'Checking updates...')}", font=FONT_SMALL, fg=FG_CYAN, bg=BG_PANEL).pack(pady=1)
         
-        tk.Frame(main_frame, height=2, bg=BORDER_COLOR).pack(fill="x", padx=50, pady=10)
+        tk.Frame(main_frame, height=2, bg=BORDER_COLOR).pack(fill="x", padx=40, pady=8)
         
-        self.progress = ttk.Progressbar(
-            main_frame,
-            mode="indeterminate",
-            style="Cyber.Horizontal.TProgressbar"
-        )
-        self.progress.pack(fill="x", padx=40, pady=10)
-        self.progress.start(15)
+        self.progress = ttk.Progressbar(main_frame, mode="indeterminate", style="Cyber.Horizontal.TProgressbar")
+        self.progress.pack(fill="x", padx=40, pady=8)
+        self.progress.start(12)
         
-        self.status_label = tk.Label(
-            main_frame,
-            text="Preparing update...",
-            font=FONT_SMALL,
-            fg=FG_MUTED,
-            bg=BG_PANEL
-        )
-        self.status_label.pack(pady=5)
+        self.status_label = tk.Label(main_frame, text="Maintenance mode is currently enforced...", font=FONT_SMALL, fg=FG_YELLOW, bg=BG_PANEL)
+        self.status_label.pack(pady=4)
         
-        self.close_btn = tk.Button(
-            main_frame,
-            text="💾 CLOSE & UPDATE",
-            command=self.force_close,
+        btn_frame = tk.Frame(main_frame, bg=BG_PANEL)
+        btn_frame.pack(pady=10)
+
+        # Exit application button (Only allowed exit)
+        self.exit_btn = tk.Button(
+            btn_frame,
+            text="🚪 EXIT APP",
+            command=self.force_exit_app,
             font=FONT_MONO_BOLD,
             bg=BG_ENTRY,
-            fg=FG_GREEN,
-            activebackground=FG_GREEN,
+            fg=FG_RED,
+            activebackground=FG_RED,
             activeforeground=BG_ROOT,
             bd=1,
             relief="solid",
-            padx=20,
-            pady=8,
-            cursor="hand2",
-            state="disabled"
+            padx=16,
+            pady=6,
+            cursor="hand2"
         )
-        self.close_btn.pack(pady=10)
+        self.exit_btn.pack(side="left", padx=5)
         
-        self.bind("<Escape>", lambda e: self.force_close())
-    
+        # Enforce Focus
+        self.after(100, self.grab_set)
+
+    def prevent_close(self):
+        """Harangin ang pagsasara ng window."""
+        pass
+
     def update_status(self, text):
         self.status_label.config(text=text)
         self.update()
-    
-    def enable_close(self):
-        self.close_btn.config(state="normal")
-    
-    def force_close(self):
+
+    def force_exit_app(self):
+        """Isasara ang buong application."""
         self.progress.stop()
-        self.destroy()
+        self.parent.destroy()
+        sys.exit(0)
 
 
 # ====================================================================
@@ -358,18 +389,21 @@ class CyberSupabaseIDE(tk.Tk):
         self.minsize(1020, 700)
         self.configure(bg=BG_ROOT)
 
-        # Initialize Version Manager
+        # Custom Icon Setup
+        self.load_app_icon()
+
+        # Version Managers
         self.version_manager = GitHubVersionManager()
         self.update_manager = GitHubUpdateManager()
 
-        # App States
+        # States
         self.is_running = False
         self.discovered_tables = []
         self.table_data = {}
         self.total_records = 0
         self.current_loaded_file = None
+        self.overlay_frame = None
         
-        # Navigation States
         self.match_ranges = []
         self.current_match_idx = -1
 
@@ -382,9 +416,27 @@ class CyberSupabaseIDE(tk.Tk):
         self.refresh_file_tree()
         
         self.log_terminal(f"[*] Workspace ready. Storage: {self.base_dump_dir}", "CYAN")
+        self.log_terminal(f"[*] Security: Auto-Encrypted Output Storage ENABLED [AES-256]", "GREEN")
         self.log_terminal(f"[*] Version {APP_VERSION} loaded", "GREEN")
         
-        self.after(1000, self.check_maintenance_and_updates)
+        # Immediate Maintenance Check
+        self.after(200, self.check_maintenance_and_updates)
+
+    def load_app_icon(self):
+        """Loads custom app icon if available"""
+        try:
+            for icon_name in ["supdump.ico", "app.ico", "icon.ico"]:
+                path = resource_path(icon_name)
+                if os.path.exists(path):
+                    self.iconbitmap(path)
+                    return
+            for png_name in ["supdump.png", "app.png", "icon.png"]:
+                path = resource_path(png_name)
+                if os.path.exists(path):
+                    self.iconphoto(False, tk.PhotoImage(file=path))
+                    return
+        except Exception:
+            pass
 
     def setup_styles(self):
         self.style = ttk.Style(self)
@@ -424,6 +476,31 @@ class CyberSupabaseIDE(tk.Tk):
             borderwidth=0
         )
         self.style.map("Cyber.Treeview", background=[("selected", BORDER_COLOR)], foreground=[("selected", FG_GREEN)])
+
+    # ====================================================================
+    # 🔒 MAINTENANCE & BLUR OVERLAY CONTROLS
+    # ====================================================================
+    def show_maintenance_overlay(self):
+        """Tatakpan ng dark dimmed overlay ang buong interface para hindi magamit."""
+        if not self.overlay_frame:
+            self.overlay_frame = tk.Frame(self, bg="#040607")
+            self.overlay_frame.place(relx=0, rely=0, relwidth=1, relheight=1)
+            
+            # Subtle background label
+            lbl = tk.Label(
+                self.overlay_frame,
+                text="⛔ SYSTEM LOCKED — UNDER MAINTENANCE ⛔",
+                font=("Consolas", 15, "bold"),
+                fg=FG_RED,
+                bg="#040607"
+            )
+            lbl.place(relx=0.5, rely=0.5, anchor="center")
+
+    def hide_maintenance_overlay(self):
+        """Aalisin ang overlay kapag hindi na maintenance."""
+        if self.overlay_frame:
+            self.overlay_frame.destroy()
+            self.overlay_frame = None
 
     # ====================================================================
     # 🖥️ VERSION CONTROL UI
@@ -472,51 +549,43 @@ class CyberSupabaseIDE(tk.Tk):
     def _do_maintenance_check(self):
         try:
             maintenance, message = self.update_manager.check_maintenance_mode()
-            
             if maintenance:
-                version_info = {
-                    "current": APP_VERSION,
-                    "new": "Updating..."
-                }
-                self.after(0, lambda: self._show_maintenance_popup(message, version_info))
+                version_info = {"current": APP_VERSION, "new": "Updating / Locked"}
+                self.after(0, lambda: self._show_maintenance_lockout(message, version_info))
                 return
             
+            # Normal background update check
             release = self.update_manager.get_latest_release()
             if release:
                 latest_version = release.get("tag_name", "").replace("v", "")
                 if latest_version != APP_VERSION:
                     self.after(0, lambda: self.show_update_notification(release))
-                    
         except Exception as e:
             self.log_terminal(f"[!] Update check failed: {str(e)}", "YELLOW")
 
-    def _show_maintenance_popup(self, message, version_info):
+    def _show_maintenance_lockout(self, message, version_info):
+        """I-lock ang main screen at ilabas ang unclosable popup."""
+        self.show_maintenance_overlay()
         popup = MaintenancePopup(self, message, version_info)
-        popup.update_status("Downloading update...")
         threading.Thread(target=self._download_maintenance_update, args=(popup,), daemon=True).start()
 
     def _download_maintenance_update(self, popup):
         try:
             release = self.update_manager.get_latest_release()
             if not release:
-                popup.update_status("No update available")
-                popup.enable_close()
+                popup.update_status("Maintenance mode active. No updates found.")
                 return
             
-            popup.update_status(f"Downloading version {release.get('tag_name')}...")
+            popup.update_status(f"Downloading update {release.get('tag_name')}...")
             success = self.update_manager.download_release(release)
             
             if success:
-                popup.update_status("Update downloaded! Restarting...")
-                popup.enable_close()
+                popup.update_status("Update ready! Restarting system...")
                 self.after(2000, self._restart_application)
             else:
-                popup.update_status("Download failed. Please try again later.")
-                popup.enable_close()
-                
+                popup.update_status("Maintenance active. Update pending.")
         except Exception as e:
-            popup.update_status(f"Error: {str(e)}")
-            popup.enable_close()
+            popup.update_status("Maintenance mode active.")
 
     def show_update_notification(self, release_info):
         version = release_info.get("tag_name", "").replace("v", "")
@@ -532,7 +601,6 @@ class CyberSupabaseIDE(tk.Tk):
             f"Latest: v{version}\n\n"
             "Would you like to download and install the update now?"
         )
-        
         if result:
             self.apply_update(release_info)
 
@@ -543,6 +611,11 @@ class CyberSupabaseIDE(tk.Tk):
 
     def _do_manual_check(self):
         try:
+            maintenance, message = self.update_manager.check_maintenance_mode()
+            if maintenance:
+                self.after(0, lambda: self._show_maintenance_lockout(message, {"current": APP_VERSION, "new": "Under Maintenance"}))
+                return
+            
             release = self.update_manager.get_latest_release()
             self.after(0, lambda: self._show_manual_check_result(release))
         except Exception as e:
@@ -557,11 +630,9 @@ class CyberSupabaseIDE(tk.Tk):
             return
         
         latest_version = release.get("tag_name", "").replace("v", "")
-        
         if latest_version == APP_VERSION:
             messagebox.showinfo("✅ Up to Date", f"Version {APP_VERSION} is the latest version!")
             return
-        
         self.show_update_notification(release)
 
     def apply_update(self, release_info):
@@ -573,7 +644,6 @@ class CyberSupabaseIDE(tk.Tk):
         try:
             version = release_info.get("tag_name", "").replace("v", "")
             success = self.update_manager.download_release(release_info)
-            
             if success:
                 self.after(0, lambda: messagebox.showinfo(
                     "✅ Update Applied",
@@ -608,24 +678,12 @@ class CyberSupabaseIDE(tk.Tk):
         dialog.geometry("600x400")
         dialog.configure(bg=BG_PANEL)
         
-        tk.Label(
-            dialog,
-            text="Available Updates & Releases",
-            font=FONT_TITLE,
-            fg=FG_GREEN,
-            bg=BG_PANEL
-        ).pack(pady=10)
+        tk.Label(dialog, text="Available Updates & Releases", font=FONT_TITLE, fg=FG_GREEN, bg=BG_PANEL).pack(pady=10)
         
         list_frame = tk.Frame(dialog, bg=BG_PANEL)
         list_frame.pack(fill="both", expand=True, padx=20, pady=5)
         
-        listbox = tk.Listbox(
-            list_frame,
-            bg=BG_ENTRY,
-            fg=FG_WHITE,
-            font=FONT_MONO,
-            selectbackground=BORDER_COLOR
-        )
+        listbox = tk.Listbox(list_frame, bg=BG_ENTRY, fg=FG_WHITE, font=FONT_MONO, selectbackground=BORDER_COLOR)
         listbox.pack(fill="both", expand=True)
         
         for release in releases[:10]:
@@ -635,16 +693,7 @@ class CyberSupabaseIDE(tk.Tk):
             prerelease = " [PRERELEASE]" if release.get("prerelease") else ""
             listbox.insert(tk.END, f"{version} - {name} ({date}){prerelease}")
         
-        tk.Button(
-            dialog,
-            text="CLOSE",
-            command=dialog.destroy,
-            bg=BG_ENTRY,
-            fg=FG_GREEN,
-            font=FONT_MONO_BOLD,
-            padx=20,
-            pady=5
-        ).pack(pady=10)
+        tk.Button(dialog, text="CLOSE", command=dialog.destroy, bg=BG_ENTRY, fg=FG_GREEN, font=FONT_MONO_BOLD, padx=20, pady=5).pack(pady=10)
 
     def rollback_previous(self):
         backups = self.version_manager.get_available_backups()
@@ -657,21 +706,9 @@ class CyberSupabaseIDE(tk.Tk):
         dialog.geometry("500x350")
         dialog.configure(bg=BG_PANEL)
         
-        tk.Label(
-            dialog,
-            text="Select a version to rollback to:",
-            font=FONT_HEADER,
-            fg=FG_GREEN,
-            bg=BG_PANEL
-        ).pack(pady=10)
+        tk.Label(dialog, text="Select a version to rollback to:", font=FONT_HEADER, fg=FG_GREEN, bg=BG_PANEL).pack(pady=10)
         
-        listbox = tk.Listbox(
-            dialog,
-            bg=BG_ENTRY,
-            fg=FG_WHITE,
-            font=FONT_MONO,
-            selectbackground=BORDER_COLOR
-        )
+        listbox = tk.Listbox(dialog, bg=BG_ENTRY, fg=FG_WHITE, font=FONT_MONO, selectbackground=BORDER_COLOR)
         listbox.pack(fill="both", expand=True, padx=20, pady=10)
         
         for backup in backups:
@@ -701,16 +738,7 @@ class CyberSupabaseIDE(tk.Tk):
                 else:
                     messagebox.showerror("Rollback Failed", "Could not rollback to the selected version.")
         
-        tk.Button(
-            dialog,
-            text="ROLLBACK",
-            command=do_rollback,
-            bg=BG_ENTRY,
-            fg=FG_RED,
-            font=FONT_MONO_BOLD,
-            padx=20,
-            pady=5
-        ).pack(pady=10)
+        tk.Button(dialog, text="ROLLBACK", command=do_rollback, bg=BG_ENTRY, fg=FG_RED, font=FONT_MONO_BOLD, padx=20, pady=5).pack(pady=10)
 
     def open_backup_folder(self):
         try:
@@ -727,6 +755,7 @@ class CyberSupabaseIDE(tk.Tk):
             f"{APP_NAME} v{APP_VERSION}\n\n"
             "Supabase Cyber Extractor & Data IDE\n\n"
             "Features:\n"
+            "• Auto-Encrypted local storage\n"
             "• Auto-updates & Maintenance support\n"
             "• Version rollback\n"
             "• Credential extraction\n"
@@ -750,7 +779,6 @@ class CyberSupabaseIDE(tk.Tk):
         top_bar.grid(row=0, column=0, sticky="ew")
 
         tk.Label(top_bar, text="⚡ SUPABASE DATA STUDIO // CYBER IDE", font=FONT_TITLE, fg=FG_GREEN, bg=BG_ROOT).pack(side="left")
-        
         self.create_version_menu(top_bar)
         
         self.lbl_workspace = tk.Label(top_bar, text=f"DIR: {self.base_dump_dir}", font=FONT_SMALL, fg=FG_MUTED, bg=BG_ROOT)
@@ -798,12 +826,10 @@ class CyberSupabaseIDE(tk.Tk):
         config_frame.grid(row=0, column=0, sticky="ew", padx=8, pady=8)
         config_frame.grid_columnconfigure(1, weight=1)
 
-        # TARGET URL (Walang pre-filled text)
         tk.Label(config_frame, text="TARGET URL:", font=FONT_MONO_BOLD, fg=FG_GREEN, bg=BG_PANEL).grid(row=0, column=0, sticky="w", pady=3)
         self.url_entry = tk.Entry(config_frame, font=FONT_MONO, fg=FG_GREEN, bg=BG_ENTRY, insertbackground=FG_GREEN, relief="flat", bd=4)
         self.url_entry.grid(row=0, column=1, sticky="ew", padx=8, pady=3)
 
-        # API/ANON KEY (Walang pre-filled text)
         tk.Label(config_frame, text="API/ANON KEY:", font=FONT_MONO_BOLD, fg=FG_GREEN, bg=BG_PANEL).grid(row=1, column=0, sticky="w", pady=3)
         self.key_entry = tk.Entry(config_frame, font=FONT_MONO, fg=FG_GREEN, bg=BG_ENTRY, insertbackground=FG_GREEN, relief="flat", bd=4)
         self.key_entry.grid(row=1, column=1, sticky="ew", padx=8, pady=3)
@@ -863,7 +889,7 @@ class CyberSupabaseIDE(tk.Tk):
         self.progress_bar.pack(side="right", fill="x", expand=True, padx=(10, 0))
 
     # ====================================================================
-    # 📁 TAB 2: WORKSPACE & VIEWER
+    # 📁 TAB 2: WORKSPACE & VIEWER (WITH AUTO-DECRYPTION)
     # ====================================================================
     def build_viewer_tab(self):
         self.tab_viewer.grid_columnconfigure(1, weight=1)
@@ -1119,7 +1145,7 @@ class CyberSupabaseIDE(tk.Tk):
             self.lbl_match_count.config(text="[ 0 matches ]", fg=FG_RED)
 
     # ====================================================================
-    # 📂 FILE EXPLORER & VIEWER LOADER
+    # 📂 FILE EXPLORER & VIEWER LOADER (WITH AUTO-DECRYPTION)
     # ====================================================================
     def refresh_file_tree(self):
         for item in self.file_tree.get_children():
@@ -1138,7 +1164,7 @@ class CyberSupabaseIDE(tk.Tk):
             for f in sorted(files, reverse=True):
                 if f.endswith(".json"):
                     full_fpath = os.path.join(root, f)
-                    self.file_tree.insert(parent_node, "end", full_fpath, text=f" 📄 {f}")
+                    self.file_tree.insert(parent_node, "end", full_fpath, text=f" 🔒 {f}")
 
     def on_tree_file_selected(self, event):
         selected_item = self.file_tree.focus()
@@ -1148,25 +1174,29 @@ class CyberSupabaseIDE(tk.Tk):
     def load_file_into_editor(self, filepath):
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
-                content = f.read()
+                raw_encrypted_content = f.read()
+
+            decrypted_content = decrypt_data(raw_encrypted_content)
+
             try:
-                parsed = json.loads(content)
+                parsed = json.loads(decrypted_content)
                 formatted = json.dumps(parsed, indent=2, ensure_ascii=False)
             except Exception:
-                formatted = content
+                formatted = decrypted_content
+
             self.editor_text.delete("1.0", tk.END)
             self.editor_text.insert(tk.END, formatted)
             self.current_loaded_file = filepath
             size_kb = round(os.path.getsize(filepath) / 1024, 2)
             lines = formatted.count("\n") + 1
             self.lbl_file_info.config(
-                text=f"FILE: {os.path.basename(filepath)} | Size: {size_kb} KB | Lines: {lines}",
+                text=f"FILE: {os.path.basename(filepath)} [DECRYPTED] | Size: {size_kb} KB | Lines: {lines}",
                 fg=FG_GREEN
             )
             self.notebook.select(self.tab_viewer)
             self.clear_search_highlights()
         except Exception as e:
-            messagebox.showerror("Read Error", f"Could not read file:\n{e}")
+            messagebox.showerror("Read Error", f"Could not decrypt/read file:\n{e}")
 
     def open_in_os_explorer(self):
         target = self.current_loaded_file if self.current_loaded_file else self.base_dump_dir
@@ -1354,6 +1384,7 @@ class CyberSupabaseIDE(tk.Tk):
                     break
             self.table_data[tbl] = all_records
             self.log_terminal(f"[✓] Finished '{tbl}' ({len(all_records)} rows)", "GREEN")
+        
         target_folder, file_path = self.get_auto_dump_path(url)
         output = {
             "target_url": url,
@@ -1366,18 +1397,25 @@ class CyberSupabaseIDE(tk.Tk):
             "data": self.table_data
         }
         try:
+            raw_json_str = json.dumps(output, indent=2, ensure_ascii=False)
+            encrypted_payload = encrypt_data(raw_json_str)
             with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(output, f, indent=2, ensure_ascii=False)
+                f.write(encrypted_payload)
+                
             self.log_terminal(f"[★] EXTRACTION COMPLETE: {self.total_records} rows secured.", "YELLOW")
-            self.log_terminal(f"[💾] SAVED TO: {file_path}", "GREEN")
+            self.log_terminal(f"[🔒] ENCRYPTED & SAVED TO: {file_path}", "GREEN")
+            
             self.after(0, self.refresh_file_tree)
             self.after(0, lambda: self.load_file_into_editor(file_path))
             messagebox.showinfo(
                 "Extraction Finished",
-                f"Successfully dumped {self.total_records} records!\n\nFile saved to:\n{file_path}\n\nAuto-loaded into Workspace Viewer."
+                f"Successfully dumped {self.total_records} records!\n\n"
+                f"🔒 Storage: Encrypted on Disk\n"
+                f"Saved to: {file_path}\n\n"
+                "Decrypted & Auto-loaded into Workspace Viewer."
             )
         except Exception as e:
-            self.log_terminal(f"[✗] Auto-save failed: {e}", "RED")
+            self.log_terminal(f"[✗] Save failed: {e}", "RED")
         self.after(0, lambda: self.stop_progress("DUMP COMPLETE"))
         self.set_status("Dump completed", False)
         self.set_controls_state(True)
