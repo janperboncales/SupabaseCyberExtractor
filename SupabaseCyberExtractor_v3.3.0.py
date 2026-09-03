@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """
 ======================================================================
- SUPABASE CYBER EXTRACTOR & DATA IDE // v3.3 [GITHUB EDITION]
+ SUPABASE CYBER EXTRACTOR & DATA IDE // v3.3 [STANDALONE EDITION]
 ======================================================================
  Features:
-  - GitHub-Powered Auto-Update (Self-Modifying)
-  - Version Control (Up/Downgrade via GitHub Releases)
-  - Maintenance Mode with Themed Popup
+  - Background Auto-Update & Maintenance Engine
+  - Version Control & Rollback System
   - Step-by-Step Credential Navigator
   - Dedicated Regex Key-Value Matcher
   - Auto-Save Hierarchy (C:\JuicyDumper\<Target>\<File>.json)
@@ -36,11 +35,11 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ====================================================================
-# 🚀 GITHUB VERSION CONTROL CONFIGURATION
+# 🚀 VERSION & REPO CONFIGURATION
 # ====================================================================
 APP_VERSION = "3.3.0"
 APP_NAME = "SupabaseCyberExtractor"
-GITHUB_REPO = "janperboncales/SupabaseCyberExtractor"  # PALITAN MO ITO!
+GITHUB_REPO = "janperboncales/SupabaseCyberExtractor"
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases"
 GITHUB_RAW_URL = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main"
 
@@ -76,10 +75,10 @@ FONT_SMALL = ("Consolas", 8)
 
 
 # ====================================================================
-# 🛠️ GITHUB VERSION CONTROL ENGINE
+# 🛠️ VERSION CONTROL ENGINE
 # ====================================================================
 class GitHubVersionManager:
-    """Handles version checking and updates via GitHub"""
+    """Handles version checking and updates"""
     
     def __init__(self, app_path=None):
         self.app_path = app_path or sys.argv[0]
@@ -118,7 +117,7 @@ class GitHubVersionManager:
         try:
             shutil.copy2(self.app_path, backup_path)
             return backup_path
-        except Exception as e:
+        except Exception:
             return None
     
     def get_available_backups(self):
@@ -149,13 +148,13 @@ class GitHubVersionManager:
                     os.replace(self.app_path + ".new", self.app_path)
                     self.save_version_info(version, "rollback")
                     return True
-                except Exception as e:
+                except Exception:
                     return False
         return False
 
 
 class GitHubUpdateManager:
-    """Handles GitHub-based updates"""
+    """Handles background updates"""
     
     def __init__(self, repo=None):
         self.repo = repo or GITHUB_REPO
@@ -164,7 +163,6 @@ class GitHubUpdateManager:
         self.version_manager = GitHubVersionManager()
     
     def get_latest_release(self):
-        """Get latest release from GitHub"""
         try:
             response = requests.get(self.api_url + "/latest", timeout=10)
             if response.status_code == 200:
@@ -174,7 +172,6 @@ class GitHubUpdateManager:
             return None
     
     def get_all_releases(self):
-        """Get all releases from GitHub"""
         try:
             response = requests.get(self.api_url, timeout=10)
             if response.status_code == 200:
@@ -184,9 +181,7 @@ class GitHubUpdateManager:
             return []
     
     def check_maintenance_mode(self):
-        """Check if maintenance mode is enabled"""
         try:
-            # Check GitHub for maintenance status
             response = requests.get(
                 f"{self.raw_url}/maintenance.json",
                 timeout=5
@@ -199,25 +194,19 @@ class GitHubUpdateManager:
             return False, ""
     
     def download_release(self, release_info):
-        """Download a specific release"""
         try:
-            # Find asset
             assets = release_info.get("assets", [])
             if not assets:
-                # If no asset, try to download from raw URL
                 version = release_info.get("tag_name", "").replace("v", "")
                 download_url = f"{self.raw_url}/dist/SupabaseCyberExtractor_v{version}.exe"
             else:
-                # Download first asset (usually the .exe)
                 download_url = assets[0].get("browser_download_url")
             
             if not download_url:
                 return False
             
-            # Create backup first
             self.version_manager.create_backup()
             
-            # Download
             response = requests.get(download_url, stream=True, timeout=60)
             if response.status_code == 200:
                 temp_file = os.path.join(tempfile.gettempdir(), f"{APP_NAME}_update.exe")
@@ -225,17 +214,15 @@ class GitHubUpdateManager:
                     for chunk in response.iter_content(chunk_size=8192):
                         f.write(chunk)
                 
-                # Replace current executable
                 shutil.copy2(temp_file, sys.argv[0] + ".new")
                 os.replace(sys.argv[0] + ".new", sys.argv[0])
                 
-                # Update version info
                 version = release_info.get("tag_name", "").replace("v", "")
                 self.version_manager.save_version_info(version, "update")
                 
                 return True
             return False
-        except Exception as e:
+        except Exception:
             return False
 
 
@@ -251,9 +238,8 @@ class MaintenancePopup(tk.Toplevel):
         self.title("⛔ SYSTEM MAINTENANCE")
         self.geometry("500x400")
         self.configure(bg=BG_PANEL)
-        self.overrideredirect(True)  # Remove window decorations for cleaner look
+        self.overrideredirect(True)
         
-        # Center on screen
         self.update_idletasks()
         width = 500
         height = 400
@@ -261,11 +247,9 @@ class MaintenancePopup(tk.Toplevel):
         y = (self.winfo_screenheight() // 2) - (height // 2)
         self.geometry(f"{width}x{height}+{x}+{y}")
         
-        # Main container with border
         main_frame = tk.Frame(self, bg=BG_PANEL, bd=2, relief="solid", highlightbackground=BORDER_COLOR, highlightthickness=1)
         main_frame.pack(fill="both", expand=True, padx=10, pady=10)
         
-        # Icon/Logo
         icon_label = tk.Label(
             main_frame,
             text="🔧",
@@ -275,7 +259,6 @@ class MaintenancePopup(tk.Toplevel):
         )
         icon_label.pack(pady=(20, 10))
         
-        # Title
         tk.Label(
             main_frame,
             text="SYSTEM UNDER MAINTENANCE",
@@ -284,10 +267,8 @@ class MaintenancePopup(tk.Toplevel):
             bg=BG_PANEL
         ).pack(pady=5)
         
-        # Separator
         tk.Frame(main_frame, height=2, bg=BORDER_COLOR).pack(fill="x", padx=50, pady=10)
         
-        # Message
         tk.Label(
             main_frame,
             text=message,
@@ -298,7 +279,6 @@ class MaintenancePopup(tk.Toplevel):
             justify="center"
         ).pack(pady=10)
         
-        # Version info if available
         if version_info:
             tk.Label(
                 main_frame,
@@ -315,10 +295,8 @@ class MaintenancePopup(tk.Toplevel):
                 bg=BG_PANEL
             ).pack(pady=2)
         
-        # Separator
         tk.Frame(main_frame, height=2, bg=BORDER_COLOR).pack(fill="x", padx=50, pady=10)
         
-        # Progress indicator
         self.progress = ttk.Progressbar(
             main_frame,
             mode="indeterminate",
@@ -327,7 +305,6 @@ class MaintenancePopup(tk.Toplevel):
         self.progress.pack(fill="x", padx=40, pady=10)
         self.progress.start(15)
         
-        # Status text
         self.status_label = tk.Label(
             main_frame,
             text="Preparing update...",
@@ -337,7 +314,6 @@ class MaintenancePopup(tk.Toplevel):
         )
         self.status_label.pack(pady=5)
         
-        # Close button (hidden until ready)
         self.close_btn = tk.Button(
             main_frame,
             text="💾 CLOSE & UPDATE",
@@ -356,20 +332,16 @@ class MaintenancePopup(tk.Toplevel):
         )
         self.close_btn.pack(pady=10)
         
-        # Bind escape key to close
         self.bind("<Escape>", lambda e: self.force_close())
     
     def update_status(self, text):
-        """Update status label"""
         self.status_label.config(text=text)
         self.update()
     
     def enable_close(self):
-        """Enable close button"""
         self.close_btn.config(state="normal")
     
     def force_close(self):
-        """Force close the popup and restart app if needed"""
         self.progress.stop()
         self.destroy()
 
@@ -411,9 +383,7 @@ class CyberSupabaseIDE(tk.Tk):
         
         self.log_terminal(f"[*] Workspace ready. Storage: {self.base_dump_dir}", "CYAN")
         self.log_terminal(f"[*] Version {APP_VERSION} loaded", "GREEN")
-        self.log_terminal(f"[*] GitHub Repo: {GITHUB_REPO}", "CYAN")
         
-        # Check for maintenance mode and updates
         self.after(1000, self.check_maintenance_and_updates)
 
     def setup_styles(self):
@@ -456,10 +426,9 @@ class CyberSupabaseIDE(tk.Tk):
         self.style.map("Cyber.Treeview", background=[("selected", BORDER_COLOR)], foreground=[("selected", FG_GREEN)])
 
     # ====================================================================
-    # 🖥️ GITHUB VERSION CONTROL UI
+    # 🖥️ VERSION CONTROL UI
     # ====================================================================
     def setup_version_ui(self):
-        """Add version control menu to the top bar"""
         self.version_status_label = tk.Label(
             self,
             text=f"v{APP_VERSION}",
@@ -470,10 +439,9 @@ class CyberSupabaseIDE(tk.Tk):
         self.version_status_label.place(relx=0.5, y=10, anchor="n")
     
     def create_version_menu(self, parent):
-        """Create version control dropdown menu"""
         menu_btn = tk.Menubutton(
             parent,
-            text="⚙️ GITHUB",
+            text="⚙️ UPDATES",
             font=FONT_MONO_BOLD,
             bg=BG_ENTRY,
             fg=FG_CYAN,
@@ -492,7 +460,6 @@ class CyberSupabaseIDE(tk.Tk):
         menu.add_separator()
         menu.add_command(label="⬅️ Rollback to Previous", command=self.rollback_previous)
         menu.add_separator()
-        menu.add_command(label="🌐 Open GitHub Repo", command=self.open_github_repo)
         menu.add_command(label="📂 Open Backup Folder", command=self.open_backup_folder)
         menu.add_separator()
         menu.add_command(label="ℹ️ About", command=self.show_about)
@@ -500,16 +467,13 @@ class CyberSupabaseIDE(tk.Tk):
         return menu_btn
 
     def check_maintenance_and_updates(self):
-        """Check maintenance mode and updates in background"""
         threading.Thread(target=self._do_maintenance_check, daemon=True).start()
 
     def _do_maintenance_check(self):
         try:
-            # Check maintenance mode first
             maintenance, message = self.update_manager.check_maintenance_mode()
             
             if maintenance:
-                # Show maintenance popup
                 version_info = {
                     "current": APP_VERSION,
                     "new": "Updating..."
@@ -517,7 +481,6 @@ class CyberSupabaseIDE(tk.Tk):
                 self.after(0, lambda: self._show_maintenance_popup(message, version_info))
                 return
             
-            # Then check for updates
             release = self.update_manager.get_latest_release()
             if release:
                 latest_version = release.get("tag_name", "").replace("v", "")
@@ -528,15 +491,11 @@ class CyberSupabaseIDE(tk.Tk):
             self.log_terminal(f"[!] Update check failed: {str(e)}", "YELLOW")
 
     def _show_maintenance_popup(self, message, version_info):
-        """Show themed maintenance popup"""
         popup = MaintenancePopup(self, message, version_info)
         popup.update_status("Downloading update...")
-        
-        # Start download in background
         threading.Thread(target=self._download_maintenance_update, args=(popup,), daemon=True).start()
 
     def _download_maintenance_update(self, popup):
-        """Download update during maintenance mode"""
         try:
             release = self.update_manager.get_latest_release()
             if not release:
@@ -550,7 +509,6 @@ class CyberSupabaseIDE(tk.Tk):
             if success:
                 popup.update_status("Update downloaded! Restarting...")
                 popup.enable_close()
-                # Auto-restart after 2 seconds
                 self.after(2000, self._restart_application)
             else:
                 popup.update_status("Download failed. Please try again later.")
@@ -561,7 +519,6 @@ class CyberSupabaseIDE(tk.Tk):
             popup.enable_close()
 
     def show_update_notification(self, release_info):
-        """Show update notification popup"""
         version = release_info.get("tag_name", "").replace("v", "")
         name = release_info.get("name", version)
         body = release_info.get("body", "No release notes available.")
@@ -580,9 +537,8 @@ class CyberSupabaseIDE(tk.Tk):
             self.apply_update(release_info)
 
     def check_updates_manual(self):
-        """Manual update check"""
         self.set_status("Checking for updates...", True)
-        self.start_progress_indeterminate("Checking GitHub...")
+        self.start_progress_indeterminate("Checking for updates...")
         threading.Thread(target=self._do_manual_check, daemon=True).start()
 
     def _do_manual_check(self):
@@ -609,16 +565,13 @@ class CyberSupabaseIDE(tk.Tk):
         self.show_update_notification(release)
 
     def apply_update(self, release_info):
-        """Apply the update"""
         self.set_status("Updating...", True)
         self.start_progress_indeterminate("Downloading update...")
-        
         threading.Thread(target=self._do_apply_update, args=(release_info,), daemon=True).start()
 
     def _do_apply_update(self, release_info):
         try:
             version = release_info.get("tag_name", "").replace("v", "")
-            
             success = self.update_manager.download_release(release_info)
             
             if success:
@@ -636,7 +589,6 @@ class CyberSupabaseIDE(tk.Tk):
             self.after(0, lambda: self.set_status("Idle", False))
 
     def view_releases(self):
-        """View all releases from GitHub"""
         threading.Thread(target=self._do_view_releases, daemon=True).start()
 
     def _do_view_releases(self):
@@ -648,17 +600,17 @@ class CyberSupabaseIDE(tk.Tk):
 
     def _show_releases_dialog(self, releases):
         if not releases:
-            messagebox.showinfo("No Releases", "No releases found in the repository.")
+            messagebox.showinfo("No Releases", "No releases found.")
             return
         
         dialog = tk.Toplevel(self)
-        dialog.title("📋 GitHub Releases")
+        dialog.title("📋 System Releases")
         dialog.geometry("600x400")
         dialog.configure(bg=BG_PANEL)
         
         tk.Label(
             dialog,
-            text=f"Releases - {GITHUB_REPO}",
+            text="Available Updates & Releases",
             font=FONT_TITLE,
             fg=FG_GREEN,
             bg=BG_PANEL
@@ -676,7 +628,7 @@ class CyberSupabaseIDE(tk.Tk):
         )
         listbox.pack(fill="both", expand=True)
         
-        for release in releases[:10]:  # Show latest 10
+        for release in releases[:10]:
             version = release.get("tag_name", "Unknown")
             name = release.get("name", version)
             date = release.get("published_at", "").split("T")[0]
@@ -695,7 +647,6 @@ class CyberSupabaseIDE(tk.Tk):
         ).pack(pady=10)
 
     def rollback_previous(self):
-        """Rollback to previous version"""
         backups = self.version_manager.get_available_backups()
         if not backups:
             messagebox.showinfo("No Backups", "No backup versions available.")
@@ -761,12 +712,7 @@ class CyberSupabaseIDE(tk.Tk):
             pady=5
         ).pack(pady=10)
 
-    def open_github_repo(self):
-        """Open GitHub repo in browser"""
-        webbrowser.open(f"https://github.com/{GITHUB_REPO}")
-
     def open_backup_folder(self):
-        """Open backup folder in explorer"""
         try:
             if os.name == 'nt':
                 os.startfile(self.version_manager.backup_dir)
@@ -776,25 +722,20 @@ class CyberSupabaseIDE(tk.Tk):
             messagebox.showerror("Error", f"Failed to open folder: {e}")
 
     def show_about(self):
-        """Show about dialog"""
         messagebox.showinfo(
             "About",
             f"{APP_NAME} v{APP_VERSION}\n\n"
-            "Supabase Cyber Extractor & Data IDE\n"
-            "GitHub Edition with Auto-Update\n\n"
+            "Supabase Cyber Extractor & Data IDE\n\n"
             "Features:\n"
-            "• GitHub-powered auto-updates\n"
+            "• Auto-updates & Maintenance support\n"
             "• Version rollback\n"
-            "• Maintenance mode support\n"
             "• Credential extraction\n"
             "• Data dumping\n"
             "• Built-in code viewer\n\n"
-            f"GitHub: {GITHUB_REPO}\n"
             f"Backup Location: {self.version_manager.backup_dir}"
         )
 
     def _restart_application(self):
-        """Restart the application"""
         python = sys.executable
         os.execl(python, python, *sys.argv)
 
@@ -805,19 +746,16 @@ class CyberSupabaseIDE(tk.Tk):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
-        # Header Title Bar
         top_bar = tk.Frame(self, bg=BG_ROOT, pady=6, padx=15)
         top_bar.grid(row=0, column=0, sticky="ew")
 
         tk.Label(top_bar, text="⚡ SUPABASE DATA STUDIO // CYBER IDE", font=FONT_TITLE, fg=FG_GREEN, bg=BG_ROOT).pack(side="left")
         
-        # Version Control Menu
         self.create_version_menu(top_bar)
         
         self.lbl_workspace = tk.Label(top_bar, text=f"DIR: {self.base_dump_dir}", font=FONT_SMALL, fg=FG_MUTED, bg=BG_ROOT)
         self.lbl_workspace.pack(side="right", pady=4)
 
-        # Notebook Tabs
         self.notebook = ttk.Notebook(self, style="Cyber.TNotebook")
         self.notebook.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 6))
 
@@ -830,7 +768,6 @@ class CyberSupabaseIDE(tk.Tk):
         self.build_extractor_tab()
         self.build_viewer_tab()
 
-        # Footer
         footer = tk.Frame(self, bg=BG_ROOT, pady=4, padx=15)
         footer.grid(row=2, column=0, sticky="ew")
 
@@ -841,10 +778,9 @@ class CyberSupabaseIDE(tk.Tk):
         self.lbl_stats.pack(side="right")
 
     # ====================================================================
-    # ⚡ TAB 1: EXTRACTOR ENGINE (Unchanged)
+    # ⚡ TAB 1: EXTRACTOR ENGINE
     # ====================================================================
     def build_extractor_tab(self):
-        # ... Keep same as original ...
         self.tab_extractor.grid_columnconfigure(0, weight=1)
         self.tab_extractor.grid_rowconfigure(1, weight=1)
 
@@ -862,14 +798,14 @@ class CyberSupabaseIDE(tk.Tk):
         config_frame.grid(row=0, column=0, sticky="ew", padx=8, pady=8)
         config_frame.grid_columnconfigure(1, weight=1)
 
+        # TARGET URL (Walang pre-filled text)
         tk.Label(config_frame, text="TARGET URL:", font=FONT_MONO_BOLD, fg=FG_GREEN, bg=BG_PANEL).grid(row=0, column=0, sticky="w", pady=3)
         self.url_entry = tk.Entry(config_frame, font=FONT_MONO, fg=FG_GREEN, bg=BG_ENTRY, insertbackground=FG_GREEN, relief="flat", bd=4)
-        self.url_entry.insert(0, "https://obxwmbyyguzxaiticpcy.supabase.co")
         self.url_entry.grid(row=0, column=1, sticky="ew", padx=8, pady=3)
 
+        # API/ANON KEY (Walang pre-filled text)
         tk.Label(config_frame, text="API/ANON KEY:", font=FONT_MONO_BOLD, fg=FG_GREEN, bg=BG_PANEL).grid(row=1, column=0, sticky="w", pady=3)
         self.key_entry = tk.Entry(config_frame, font=FONT_MONO, fg=FG_GREEN, bg=BG_ENTRY, insertbackground=FG_GREEN, relief="flat", bd=4)
-        self.key_entry.insert(0, "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9ieHdtYnl5Z3V6eGFpdGljcGN5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ1NjI5OTYsImV4cCI6MjEwMDEzODk5Nn0.t4nhwPhoZLIzX-ZTZuV6x3wN0dIzXjDOePzwfqcgJ4c")
         self.key_entry.grid(row=1, column=1, sticky="ew", padx=8, pady=3)
 
         action_row = tk.Frame(config_frame, bg=BG_PANEL)
@@ -927,10 +863,9 @@ class CyberSupabaseIDE(tk.Tk):
         self.progress_bar.pack(side="right", fill="x", expand=True, padx=(10, 0))
 
     # ====================================================================
-    # 📁 TAB 2: WORKSPACE & VIEWER (Unchanged)
+    # 📁 TAB 2: WORKSPACE & VIEWER
     # ====================================================================
     def build_viewer_tab(self):
-        # ... Keep same as original ...
         self.tab_viewer.grid_columnconfigure(1, weight=1)
         self.tab_viewer.grid_rowconfigure(0, weight=1)
 
@@ -1024,7 +959,7 @@ class CyberSupabaseIDE(tk.Tk):
         self.lbl_file_info.pack(side="left")
 
     # ====================================================================
-    # 🎛️ WIDGET FACTORY & LOGGERS (Unchanged)
+    # 🎛️ WIDGET FACTORY & LOGGERS
     # ====================================================================
     def create_flat_btn(self, parent, text, command, fg_color):
         btn = tk.Button(
@@ -1086,7 +1021,7 @@ class CyberSupabaseIDE(tk.Tk):
         self.after(0, _update)
 
     # ====================================================================
-    # 🔍 CREDENTIAL NAVIGATOR (Unchanged)
+    # 🔍 CREDENTIAL NAVIGATOR
     # ====================================================================
     def clear_search_highlights(self):
         self.editor_text.tag_remove("HL_PASSIVE", "1.0", tk.END)
@@ -1184,7 +1119,7 @@ class CyberSupabaseIDE(tk.Tk):
             self.lbl_match_count.config(text="[ 0 matches ]", fg=FG_RED)
 
     # ====================================================================
-    # 📂 FILE EXPLORER & VIEWER LOADER (Unchanged)
+    # 📂 FILE EXPLORER & VIEWER LOADER
     # ====================================================================
     def refresh_file_tree(self):
         for item in self.file_tree.get_children():
@@ -1247,14 +1182,14 @@ class CyberSupabaseIDE(tk.Tk):
             messagebox.showerror("Error", f"Failed opening folder: {e}")
 
     # ====================================================================
-    # ⚙️ EXTRACTION ENGINE (Unchanged)
+    # ⚙️ EXTRACTION ENGINE
     # ====================================================================
     def get_credentials(self):
         url = self.url_entry.get().strip().rstrip('/')
         key = self.key_entry.get().strip()
         limit_str = self.limit_combo.get().split()[0]
         limit = int(limit_str) if limit_str.isdigit() else 1000000
-        if not url.startswith("http"):
+        if url and not url.startswith("http"):
             url = f"https://{url}"
         return url, key, limit
 
@@ -1271,6 +1206,10 @@ class CyberSupabaseIDE(tk.Tk):
 
     def start_test_thread(self):
         if self.is_running: return
+        url, key, _ = self.get_credentials()
+        if not url or not key:
+            messagebox.showwarning("Incomplete Fields", "Please enter both Target URL and API/Anon Key.")
+            return
         self.set_controls_state(False)
         threading.Thread(target=self.run_test, daemon=True).start()
 
@@ -1304,6 +1243,10 @@ class CyberSupabaseIDE(tk.Tk):
 
     def start_discover_thread(self):
         if self.is_running: return
+        url, key, _ = self.get_credentials()
+        if not url or not key:
+            messagebox.showwarning("Incomplete Fields", "Please enter both Target URL and API/Anon Key.")
+            return
         self.set_controls_state(False)
         threading.Thread(target=self.run_discover, daemon=True).start()
 
@@ -1360,6 +1303,10 @@ class CyberSupabaseIDE(tk.Tk):
 
     def start_dump_thread(self):
         if self.is_running: return
+        url, key, _ = self.get_credentials()
+        if not url or not key:
+            messagebox.showwarning("Incomplete Fields", "Please enter both Target URL and API/Anon Key.")
+            return
         if not self.discovered_tables:
             messagebox.showwarning("Notice", "No tables discovered yet. Run 'DISCOVER TABLES' first.")
             return
